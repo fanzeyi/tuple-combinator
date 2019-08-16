@@ -1,0 +1,11 @@
+[package]
+name = "tuple-combinator"
+version = "0.1.0"
+authors = ["Zeyi Fan <zeyi@fb.com>"]
+edition = "2018"
+description = "Convenience methods for dealing with Option tuples"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
