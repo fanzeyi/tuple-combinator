@@ -21,7 +21,7 @@
 /// The traits that provides helper functions for tuples. This trait implementation mirros most of
 /// the methods defined in [`Option`].
 #[doc(inline)]
-pub trait TupleCombinator {
+pub trait TupleCombinator: Sized {
     type Tuple;
 
     /// Transposes a tuple of [`Option`]s into an `Option` of tuples. This function returns `None`
@@ -42,7 +42,9 @@ pub trait TupleCombinator {
     /// let tuples = (Some("foo"), Some("bar"));
     /// assert_eq!(tuples.map(|(a, b)| format!("{}{}", a, b)).unwrap(), "foobar");
     /// ```
-    fn map<U, F: FnOnce(Self::Tuple) -> U>(self, f: F) -> Option<U>;
+    fn map<U, F: FnOnce(Self::Tuple) -> U>(self, f: F) -> Option<U> {
+        self.transpose().map(f)
+    }
 
     /// See [`Option::expect`].
     ///
@@ -59,7 +61,9 @@ pub trait TupleCombinator {
     /// let tuples: (_, Option<i32>) = (Some("foo"), None);
     /// tuples.expect("will panic");
     /// ```
-    fn expect(self, msg: &str) -> Self::Tuple;
+    fn expect(self, msg: &str) -> Self::Tuple {
+        self.transpose().expect(msg)
+    }
 
     /// See [`Option::unwrap`].
     /// ```
@@ -75,7 +79,9 @@ pub trait TupleCombinator {
     /// let tuples: (_, Option<i32>) = (Some("foo"), None);
     /// tuples.unwrap();
     /// ```
-    fn unwrap(self) -> Self::Tuple;
+    fn unwrap(self) -> Self::Tuple {
+        self.transpose().unwrap()
+    }
 
     /// See [`Option::and`].
     /// ```
@@ -87,7 +93,9 @@ pub trait TupleCombinator {
     /// let left_none = (None, Some(123));
     /// assert_eq!(left_none.and(right), None);
     /// ```
-    fn and(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple>;
+    fn and(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
+        self.transpose().and(optb)
+    }
 
     /// See [`Option::and_then`].
     /// ```
@@ -97,7 +105,9 @@ pub trait TupleCombinator {
     ///
     /// assert_eq!(tuples.and_then(|(a, b)| if b % 2 != 1 { Some(b) } else { None }), None);
     /// ```
-    fn and_then<U, F: FnOnce(Self::Tuple) -> Option<U>>(self, f: F) -> Option<U>;
+    fn and_then<U, F: FnOnce(Self::Tuple) -> Option<U>>(self, f: F) -> Option<U> {
+        self.transpose().and_then(f)
+    }
 
     /// See [`Option::filter`].
     /// ```
@@ -106,7 +116,9 @@ pub trait TupleCombinator {
     /// assert_eq!(tuples.filter(|(a, b)| b % 2 == 1), Some(("foobar", 123)));
     /// assert_eq!(tuples.filter(|(a, b)| b % 2 != 1), None);
     /// ```
-    fn filter<P: FnOnce(&Self::Tuple) -> bool>(self, predicate: P) -> Option<Self::Tuple>;
+    fn filter<P: FnOnce(&Self::Tuple) -> bool>(self, predicate: P) -> Option<Self::Tuple> {
+        self.transpose().filter(predicate)
+    }
 
     /// See [`Option::or`].
     /// ```
@@ -118,7 +130,9 @@ pub trait TupleCombinator {
     /// let left_none = (None, Some(123));
     /// assert_eq!(left_none.or(right), right);
     /// ```
-    fn or(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple>;
+    fn or(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
+        self.transpose().or(optb)
+    }
 
     /// See [`Option::or_else`].
     /// ```
@@ -128,7 +142,9 @@ pub trait TupleCombinator {
     /// assert_eq!(left.or_else(|| right), left.transpose());
     /// assert_eq!((None, Some(456)).or_else(|| right), right);
     /// ```
-    fn or_else<F: FnOnce() -> Option<Self::Tuple>>(self, f: F) -> Option<Self::Tuple>;
+    fn or_else<F: FnOnce() -> Option<Self::Tuple>>(self, f: F) -> Option<Self::Tuple> {
+        self.transpose().or_else(f)
+    }
 
     /// See [`Option::xor`].
     /// ```
@@ -139,7 +155,9 @@ pub trait TupleCombinator {
     /// assert_eq!(None.xor(left.transpose()), left.transpose());
     /// assert_eq!(left.xor(right), None);
     /// ```
-    fn xor(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple>;
+    fn xor(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
+        self.transpose().xor(optb)
+    }
 }
 
 macro_rules! tuple_impls {
@@ -153,42 +171,6 @@ macro_rules! tuple_impls {
                 } else {
                     None
                 }
-            }
-
-            fn map<U, F: FnOnce(Self::Tuple) -> U>(self, f: F) -> Option<U> {
-                self.transpose().map(f)
-            }
-
-            fn and_then<U, F: FnOnce(Self::Tuple) -> Option<U>>(self, f: F) -> Option<U> {
-                self.transpose().and_then(f)
-            }
-
-            fn expect(self, msg: &str) -> Self::Tuple {
-                self.transpose().expect(msg)
-            }
-
-            fn unwrap(self) -> Self::Tuple {
-                self.transpose().unwrap()
-            }
-
-            fn and(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
-                self.transpose().and(optb)
-            }
-
-            fn filter<P: FnOnce(&Self::Tuple) -> bool>(self, predicate: P) -> Option<Self::Tuple> {
-                self.transpose().filter(predicate)
-            }
-
-            fn or(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
-                self.transpose().or(optb)
-            }
-
-            fn or_else<F: FnOnce() -> Option<Self::Tuple>>(self, f: F) -> Option<Self::Tuple> {
-                self.transpose().or_else(f)
-            }
-
-            fn xor(self, optb: Option<Self::Tuple>) -> Option<Self::Tuple> {
-                self.transpose().xor(optb)
             }
         }
 
