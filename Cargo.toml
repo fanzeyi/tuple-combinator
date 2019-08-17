@@ -1,6 +1,6 @@
 [package]
 name = "tuple-combinator"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Zeyi Fan <zeyi@fb.com>"]
 edition = "2018"
 description = "Convenience methods for dealing with Option tuples"
