@@ -161,13 +161,13 @@ pub trait TupleCombinator: Sized {
 }
 
 macro_rules! tuple_impls {
-    ( $( $name:ident )+ ) => {
-        impl<$($name,)+> TupleCombinator for ($(Option<$name>,)+) {
-            type Tuple = ($($name,)+);
+    ( $( $v:ident: $T:ident, )* ) => {
+        impl<$($T,)*> TupleCombinator for ($(Option<$T>,)*) {
+            type Tuple = ($($T,)*);
 
             fn transpose(self) -> Option<Self::Tuple> {
-                if let ($(Some($name),)+) = self {
-                    Some(($($name,)+))
+                if let ($(Some($v),)*) = self {
+                    Some(($($v,)*))
                 } else {
                     None
                 }
@@ -177,12 +177,14 @@ macro_rules! tuple_impls {
     };
 }
 
-tuple_impls! { T1 T2 }
-tuple_impls! { T1 T2 T3 }
-tuple_impls! { T1 T2 T3 T4 }
-tuple_impls! { T1 T2 T3 T4 T5 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 T9 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 }
+tuple_impls! { }
+tuple_impls! { t1: T1, }
+tuple_impls! { t1: T1, t2: T2, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, t10: T10, }
