@@ -18,6 +18,8 @@
 //! }
 //! ```
 
+use std::any::Any;
+
 /// The traits that provides helper functions for tuples. This trait implementation mirros most of
 /// the methods defined in [`Option`].
 #[doc(inline)]
@@ -160,6 +162,59 @@ pub trait TupleCombinator: Sized {
     }
 }
 
+/// Reduce tuples of [`Option`]s into results of various form, act in comparable to the iterators.
+/// ```
+/// use tuple_combinator::TupleReducer;
+///
+/// let res = (Some(1), Some(5), Some("rust_tuple")).fold(0, |sum, item| {
+///     sum.and_then(|s| {
+///         if let Some(raw_i32) = item.downcast_ref::<Option<i32>>() {
+///             return raw_i32.as_ref()
+///                 .and_then(|val| {
+///                     Some(s + val)
+///                 });
+///         }
+///
+///         if let Some(raw_str) = item.downcast_ref::<Option<&str>>() {
+///             return raw_str.as_ref()
+///                 .and_then(|val| {
+///                     Some(s + val.len() as i32)
+///                 });
+///         }
+///
+///         Some(s)
+///     })
+/// });
+///
+/// assert_eq!(res, Some(16));
+/// ```
+#[doc(inline)]
+pub trait TupleReducer {
+    /// Fold the tuple to obtain a final outcome. Depending on the implementation of the handler
+    /// function, the fold can behave differently on various option types or values.
+    ///
+    /// # Examples
+    ///
+    /// Reduce tuples of i32 options to the sum of the contained values:
+    ///
+    /// ```rust
+    /// use tuple_combinator::TupleReducer;
+    ///
+    /// let res = (Some(17), Some(20)).fold(5, |sum, item| {
+    ///     sum.and_then(|s| {
+    ///         item.downcast_ref::<Option<i32>>()
+    ///             .and_then(|raw| raw.as_ref())
+    ///             .and_then(|val| {
+    ///                 Some(s + val)
+    ///              })
+    ///     })
+    /// });
+    ///
+    /// assert_eq!(res, Some(42));
+    /// ```
+    fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(self, init: U, f: F) -> Option<U>;
+}
+
 macro_rules! tuple_impls {
     ( $( $v:ident: $T:ident, )* ) => {
         impl<$($T,)*> TupleCombinator for ($(Option<$T>,)*) {
@@ -177,7 +232,29 @@ macro_rules! tuple_impls {
     };
 }
 
-tuple_impls! { }
+macro_rules! tuple_impl_reduce {
+    () => {};
+
+    ( $( $ntyp:ident => $nidx:tt, )+ ) => {
+
+        impl<$( $ntyp, )+> TupleReducer for ( $( Option<$ntyp>, )+ )
+        where
+            $( $ntyp: 'static, )*
+        {
+            fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(self, init: U, f: F) -> Option<U> {
+                let mut accu = Some(init);
+
+                $(
+                    accu = f(accu, &self.$nidx);
+                )*
+
+                accu
+            }
+        }
+    };
+}
+
+// Impl TupleCombinator
 tuple_impls! { t1: T1, }
 tuple_impls! { t1: T1, t2: T2, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, }
@@ -188,3 +265,87 @@ tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, t10: T10, }
+
+// Impl TupleReducer
+tuple_impl_reduce! { T0 => 0, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, T9 => 9, }
+
+#[cfg(test)]
+mod impl_tests {
+    use super::TupleReducer;
+
+    #[test]
+    fn reduce_sum() {
+        let res = (Some(17), Some(20)).fold(5, |sum, item| {
+            sum.and_then(|s| {
+                item.downcast_ref::<Option<i32>>()
+                    .and_then(|raw| raw.as_ref())
+                    .and_then(|val| Some(s + val))
+            })
+        });
+
+        assert_eq!(res, Some(42));
+    }
+
+    #[test]
+    fn reduce_mixed() {
+        let res = (Some(1), Some(5), Some("rust_tuple")).fold(0, |sum, item| {
+            sum.and_then(|s| {
+                if let Some(raw_i32) = item.downcast_ref::<Option<i32>>() {
+                    return raw_i32.as_ref().and_then(|val| Some(s + val));
+                }
+
+                if let Some(raw_str) = item.downcast_ref::<Option<&str>>() {
+                    return raw_str.as_ref().and_then(|val| Some(s + val.len() as i32));
+                }
+
+                Some(s)
+            })
+        });
+
+        assert_eq!(res, Some(16));
+    }
+
+    #[test]
+    fn reduce_none_as_nuke() {
+        let none: Option<i32> = None;
+
+        let res = (Some(1), none, Some(5)).fold(0, |sum, item| {
+            sum.and_then(|s| {
+                item.downcast_ref::<Option<i32>>()
+                    .and_then(|raw| raw.as_ref())
+                    .and_then(|val| Some(s + val))
+            })
+        });
+
+        assert_eq!(res, None);
+    }
+
+    #[test]
+    fn reduce_none_as_reset() {
+        let none: Option<i32> = None;
+        let init = 0;
+
+        let res = (Some(1), none, Some(5)).fold(init, |sum, item| {
+            item.downcast_ref::<Option<i32>>()
+                .and_then(|raw| raw.as_ref())
+                .and_then(|val| {
+                    if let Some(s) = sum {
+                        Some(s + val)
+                    } else {
+                        Some(init + val)
+                    }
+                })
+        });
+
+        assert_eq!(res, Some(5));
+    }
+}
