@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 //! A helper trait to improve the ergonomics when working with multiple [`Option`]s. After
 //! importing [`TupleCombinator`], you can treat a tuple of `Option`s as one `Option`.
 //!
@@ -255,6 +253,7 @@ macro_rules! tuple_impl_reduce {
 }
 
 // Impl TupleCombinator
+//
 tuple_impls! { t1: T1, }
 tuple_impls! { t1: T1, t2: T2, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, }
