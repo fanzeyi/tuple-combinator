@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 //! A helper trait to improve the ergonomics when working with multiple [`Option`]s. After
 //! importing [`TupleCombinator`], you can treat a tuple of `Option`s as one `Option`.
 //!
@@ -216,15 +214,13 @@ pub trait TupleReducer {
 }
 
 macro_rules! tuple_impls {
-    () => {};
-
-    ( $( $name:ident )+ ) => {
-        impl<$($name,)+> TupleCombinator for ($(Option<$name>,)+) {
-            type Tuple = ($($name,)+);
+    ( $( $v:ident: $T:ident, )* ) => {
+        impl<$($T,)*> TupleCombinator for ($(Option<$T>,)*) {
+            type Tuple = ($($T,)*);
 
             fn transpose(self) -> Option<Self::Tuple> {
-                if let ($(Some($name),)+) = self {
-                    Some(($($name,)+))
+                if let ($(Some($v),)*) = self {
+                    Some(($($v,)*))
                 } else {
                     None
                 }
@@ -232,6 +228,10 @@ macro_rules! tuple_impls {
         }
 
     };
+}
+
+macro_rules! tuple_impl_reduce {
+    () => {};
 
     ( $( $ntyp:ident => $nidx:tt, )+ ) => {
 
@@ -252,28 +252,30 @@ macro_rules! tuple_impls {
     };
 }
 
-/// Impl TupleCombinator
-tuple_impls! { T1 T2 }
-tuple_impls! { T1 T2 T3 }
-tuple_impls! { T1 T2 T3 T4 }
-tuple_impls! { T1 T2 T3 T4 T5 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 T9 }
-tuple_impls! { T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 }
+// Impl TupleCombinator
+//
+tuple_impls! { t1: T1, }
+tuple_impls! { t1: T1, t2: T2, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, }
+tuple_impls! { t1: T1, t2: T2, t3: T3, t4: T4, t5: T5, t6: T6, t7: T7, t8: T8, t9: T9, t10: T10, }
 
-/// Impl TupleReducer
-tuple_impls! { T0 => 0, }
-tuple_impls! { T0 => 0, T1 => 1, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, }
-tuple_impls! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, T9 => 9, }
+// Impl TupleReducer
+tuple_impl_reduce! { T0 => 0, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, }
+tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 => 6, T7 => 7, T8 => 8, T9 => 9, }
 
 #[cfg(test)]
 mod impl_tests {
@@ -285,9 +287,7 @@ mod impl_tests {
             sum.and_then(|s| {
                 item.downcast_ref::<Option<i32>>()
                     .and_then(|raw| raw.as_ref())
-                    .and_then(|val| {
-                        Some(s + val)
-                    })
+                    .and_then(|val| Some(s + val))
             })
         });
 
@@ -299,17 +299,11 @@ mod impl_tests {
         let res = (Some(1), Some(5), Some("rust_tuple")).fold(0, |sum, item| {
             sum.and_then(|s| {
                 if let Some(raw_i32) = item.downcast_ref::<Option<i32>>() {
-                    return raw_i32.as_ref()
-                        .and_then(|val| {
-                            Some(s + val)
-                        });
+                    return raw_i32.as_ref().and_then(|val| Some(s + val));
                 }
 
                 if let Some(raw_str) = item.downcast_ref::<Option<&str>>() {
-                    return raw_str.as_ref()
-                        .and_then(|val| {
-                            Some(s + val.len() as i32)
-                        });
+                    return raw_str.as_ref().and_then(|val| Some(s + val.len() as i32));
                 }
 
                 Some(s)
@@ -327,9 +321,7 @@ mod impl_tests {
             sum.and_then(|s| {
                 item.downcast_ref::<Option<i32>>()
                     .and_then(|raw| raw.as_ref())
-                    .and_then(|val| {
-                        Some(s + val)
-                    })
+                    .and_then(|val| Some(s + val))
             })
         });
 
