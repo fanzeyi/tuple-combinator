@@ -187,7 +187,7 @@ pub trait TupleCombinator: Sized {
 /// assert_eq!(res, Some(16));
 /// ```
 #[doc(inline)]
-pub trait TupleReducer {
+pub trait TupleReducer: Sized {
     /// Fold the tuple to obtain a final outcome. Depending on the implementation of the handler
     /// function, the fold can behave differently on various option types or values.
     ///
@@ -210,7 +210,12 @@ pub trait TupleReducer {
     ///
     /// assert_eq!(res, Some(42));
     /// ```
-    fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(self, init: U, f: F) -> Option<U>;
+    fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(&self, init: U, f: F) -> Option<U>;
+
+    /// Convert the tuples to an owned slice, where you can use native iteration tools. Note that
+    /// this is re-export of the tuples' internal content, hence the slice can't live longer than
+    /// the tuple itself.
+    fn to_slice(&self) -> Box<[&dyn Any]>;
 }
 
 macro_rules! tuple_impls {
@@ -237,9 +242,9 @@ macro_rules! tuple_impl_reduce {
 
         impl<$( $ntyp, )+> TupleReducer for ( $( Option<$ntyp>, )+ )
         where
-            $( $ntyp: 'static, )*
+            $( $ntyp: Any, )*
         {
-            fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(self, init: U, f: F) -> Option<U> {
+            fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(&self, init: U, f: F) -> Option<U> {
                 let mut accu = Some(init);
 
                 $(
@@ -248,12 +253,22 @@ macro_rules! tuple_impl_reduce {
 
                 accu
             }
+
+            fn to_slice(&self) -> Box<[&dyn Any]> {
+                // The maximum amount of elements in a tuple is 12, that's the upper-bound
+                let mut vec: Vec<&dyn Any> = Vec::with_capacity(12);
+
+                $(
+                    vec.push(&self.$nidx);
+                )*
+
+                vec.into_boxed_slice()
+            }
         }
     };
 }
 
 // Impl TupleCombinator
-//
 tuple_impls! { t1: T1, }
 tuple_impls! { t1: T1, t2: T2, }
 tuple_impls! { t1: T1, t2: T2, t3: T3, }
@@ -280,9 +295,10 @@ tuple_impl_reduce! { T0 => 0, T1 => 1, T2 => 2, T3 => 3, T4 => 4, T5 => 5, T6 =>
 #[cfg(test)]
 mod impl_tests {
     use super::TupleReducer;
+    use std::any::Any;
 
     #[test]
-    fn reduce_sum() {
+    fn fold_sum() {
         let res = (Some(17), Some(20)).fold(5, |sum, item| {
             sum.and_then(|s| {
                 item.downcast_ref::<Option<i32>>()
@@ -295,8 +311,14 @@ mod impl_tests {
     }
 
     #[test]
-    fn reduce_mixed() {
-        let res = (Some(1), Some(5), Some("rust_tuple")).fold(0, |sum, item| {
+    fn fold_mixed() {
+        let res = (
+            Some(1),
+            Some(5),
+            Some("rust_tuple"),
+            Some(String::from("tuple_reducer")),
+            Some(vec![0u8, 1, 42]), // the vec contains all the knowledge required for the universe to exist
+        ).fold(0, |sum, item| {
             sum.and_then(|s| {
                 if let Some(raw_i32) = item.downcast_ref::<Option<i32>>() {
                     return raw_i32.as_ref().and_then(|val| Some(s + val));
@@ -306,15 +328,23 @@ mod impl_tests {
                     return raw_str.as_ref().and_then(|val| Some(s + val.len() as i32));
                 }
 
+                if let Some(raw_string) = item.downcast_ref::<Option<String>>() {
+                    return raw_string.as_ref().and_then(|val| Some(s + val.len() as i32));
+                }
+
+                if let Some(raw_vec) = item.downcast_ref::<Option<Vec<u8>>>() {
+                    return raw_vec.as_ref().and_then(|val| Some(s + val.len() as i32));
+                }
+
                 Some(s)
             })
         });
 
-        assert_eq!(res, Some(16));
+        assert_eq!(res, Some(32));
     }
 
     #[test]
-    fn reduce_none_as_nuke() {
+    fn fold_none_as_nuke() {
         let none: Option<i32> = None;
 
         let res = (Some(1), none, Some(5)).fold(0, |sum, item| {
@@ -329,7 +359,7 @@ mod impl_tests {
     }
 
     #[test]
-    fn reduce_none_as_reset() {
+    fn fold_none_as_reset() {
         let none: Option<i32> = None;
         let init = 0;
 
@@ -347,4 +377,86 @@ mod impl_tests {
 
         assert_eq!(res, Some(5));
     }
+
+    #[test]
+    fn to_slice_base() {
+        let sli: Box<[&dyn Any]> = (Some(1), None as Option<&str>, Some(2), Some(())).to_slice();
+
+        assert_eq!(sli.len(), 4);
+        assert_eq!(sli[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+    }
+
+    #[test]
+    fn to_slice_closures() {
+        let sum = 0;
+        let c1 = Some(|| { sum += 1; });
+        let c2 = Some(|| { sum += 1; });
+
+        let vec: Vec<&dyn Any> = (c1, c2).to_slice();
+
+        assert_eq!(vec.len(), 2);
+        assert_eq!(vec[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+    }
 }
+
+/* Crazy stuff
+
+#![allow(unused)]
+
+use std::ptr;
+
+trait FnBox {
+    fn call_box(&mut self, val: &mut Context);
+}
+
+impl<F: Fn(&mut Context) + ?Sized> FnBox for F {
+    fn call_box(&mut self, val: &mut Context) {
+        self(val);
+    }
+}
+
+struct Context {
+    val: usize,
+}
+
+impl Context {
+    fn add(&mut self, additional: usize) {
+        self.val += additional;
+    }
+}
+
+fn main() {
+    // >>> Struct Updates <<<
+    type Func = dyn Fn(&mut Context);
+
+    let mut ctx = Context { val: 0 };
+    let c1: Box<Func> = Box::new(|sum: &mut Context| { sum.add(40); }); // if define type as: Box<dyn FnBox>, it also works
+    let c2: Box<Func> = Box::new(|sum: &mut Context| { sum.add(2); });
+
+    let mut vec: Vec<Box<Func>> = Vec::new();
+    vec.push(c1);
+    vec.push(c2);
+
+    vec.iter_mut().for_each(|cl: &mut Box<Func>| {
+       cl(&mut ctx);
+    });
+
+    // >>> Primitive Updates <<<
+    type Func1 = dyn Fn(&mut i32);
+
+    let mut sum = 0;
+    let c3: Box<Func1> = Box::new(|sum: &mut i32| { *sum += 40; }); // if define type as: Box<dyn FnBox>, it also works
+    let c4: Box<Func1> = Box::new(|sum: &mut i32| { *sum += 2; });
+
+    let mut vec1: Vec<Box<Func1>> = Vec::new();
+    vec1.push(c1);
+    vec1.push(c2);
+
+    vec1.iter_mut().for_each(|cl: &mut Box<Func1>| {
+        cl(&mut sum);
+    });
+
+    println!("sum: {}", &sum.val);
+}
+
+*/
