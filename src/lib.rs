@@ -212,10 +212,22 @@ pub trait TupleReducer: Sized {
     /// ```
     fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(&self, init: U, f: F) -> Option<U>;
 
-    /// Convert the tuples to an owned slice, where you can use native iteration tools. Note that
-    /// this is re-export of the tuples' internal content, hence the slice can't live longer than
-    /// the tuple itself.
-    fn to_slice(&self) -> Box<[&dyn Any]>;
+    ///
+    fn fold_strict<U: Any, F: Fn(Option<U>, &U) -> Option<U>>(&self, init: U, f: F) -> Option<U>;
+
+    /// Convert the tuples to a reference slice, where caller can use native iteration tools. Note
+    /// that this is re-export of the tuples' internal content, hence the slice can't live longer
+    /// than the tuple self.
+    fn ref_slice(&self) -> Box<[&dyn Any]>;
+
+    ///
+    fn strict_ref_slice<T: Any>(&self) -> Box<[&Option<T>]>;
+
+    ///
+    fn mut_slice(&mut self) -> Box<[&mut dyn Any]>;
+
+    ///
+    fn strict_mut_slice<T: Any>(&mut self) -> Box<[&mut Option<T>]>;
 }
 
 macro_rules! tuple_impls {
@@ -254,12 +266,73 @@ macro_rules! tuple_impl_reduce {
                 accu
             }
 
-            fn to_slice(&self) -> Box<[&dyn Any]> {
+            fn fold_strict<U: Any, F: Fn(Option<U>, &U) -> Option<U>>(&self, init: U, f: F) -> Option<U> {
+                let mut accu = Some(init);
+
+                $(
+                    let opt = (&self.$nidx as &dyn Any)
+                        .downcast_ref::<Option<U>>()
+                        .and_then(|opt| opt.as_ref());
+
+                    // avoid using combinator here since closure will cause `accu` to move and lead
+                    // to all sorts of headache.
+                    if let Some(value) = opt {
+                        accu = f(accu, value);
+                    }
+                )*
+
+                accu
+            }
+
+            fn ref_slice(&self) -> Box<[&dyn Any]> {
                 // The maximum amount of elements in a tuple is 12, that's the upper-bound
                 let mut vec: Vec<&dyn Any> = Vec::with_capacity(12);
 
                 $(
                     vec.push(&self.$nidx);
+                )*
+
+                vec.into_boxed_slice()
+            }
+
+            fn strict_ref_slice<T: Any>(&self) -> Box<[&Option<T>]> {
+                // The maximum amount of elements in a tuple is 12, that's the upper-bound
+                let mut vec: Vec<&Option<T>> = Vec::with_capacity(12);
+
+                $(
+                    (&self.$nidx as &dyn Any)
+                        .downcast_ref::<Option<T>>()
+                        .and_then(|opt| {
+                            vec.push(opt);
+                            Some(())
+                        });
+                )*
+
+                vec.into_boxed_slice()
+            }
+
+            fn mut_slice(&mut self) -> Box<[&mut dyn Any]> {
+                // The maximum amount of elements in a tuple is 12, that's the upper-bound
+                let mut vec: Vec<&mut dyn Any> = Vec::with_capacity(12);
+
+                $(
+                    vec.push(&mut self.$nidx);
+                )*
+
+                vec.into_boxed_slice()
+            }
+
+            fn strict_mut_slice<T: Any>(&mut self) -> Box<[&mut Option<T>]> {
+                // The maximum amount of elements in a tuple is 12, that's the upper-bound
+                let mut vec: Vec<&mut Option<T>> = Vec::with_capacity(12);
+
+                $(
+                    (&mut self.$nidx as &mut dyn Any)
+                        .downcast_mut::<Option<T>>()
+                        .and_then(|opt| {
+                            vec.push(opt);
+                            Some(())
+                        });
                 )*
 
                 vec.into_boxed_slice()
@@ -317,7 +390,7 @@ mod impl_tests {
             Some(5),
             Some("rust_tuple"),
             Some(String::from("tuple_reducer")),
-            Some(vec![0u8, 1, 42]), // the vec contains all the knowledge required for the universe to exist
+            Some(vec![0u8, 1, 42]), // the vec that wraps all the wisdom of this universe
         ).fold(0, |sum, item| {
             sum.and_then(|s| {
                 if let Some(raw_i32) = item.downcast_ref::<Option<i32>>() {
@@ -379,27 +452,50 @@ mod impl_tests {
     }
 
     #[test]
-    fn to_slice_base() {
-        let sli: Box<[&dyn Any]> = (Some(1), None as Option<&str>, Some(2), Some(())).to_slice();
+    fn fold_unwrapped_base() {
+        let res = (Some(40), None as Option<i32>, Some(2))
+            .fold_strict(0i32, |sum, item| {
+                sum.and_then(|s| {
+                    Some(s + item)
+                })
+            });
 
-        assert_eq!(sli.len(), 4);
-        assert_eq!(sli[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+        assert_eq!(res, Some(42))
     }
 
     #[test]
-    fn to_slice_closures() {
-        let sum = 0;
-        let c1 = Some(|| { sum += 1; });
-        let c2 = Some(|| { sum += 1; });
+    fn to_slice_base() {
+        let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+        let slice: Box<[&mut dyn Any]> = src.mut_slice();
 
-        let vec: Vec<&dyn Any> = (c1, c2).to_slice();
+        assert_eq!(slice.len(), 5);
+        assert_eq!(slice[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+        assert_eq!(slice[1].downcast_ref::<Option<&str>>().unwrap(), &None);
 
-        assert_eq!(vec.len(), 2);
-        assert_eq!(vec[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+        let first = slice[0].downcast_mut::<Option<i32>>().unwrap().take();
+        assert_eq!(first, Some(1));
+    }
+
+    #[test]
+    fn to_slice_unwrapped_base() {
+        let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+        let slice = src.strict_mut_slice::<i32>();
+
+        // The above variable initiation is equivalent to the following:
+        // let slice: Box<[&i32]> = src.strict_mut_slice();
+
+        assert_eq!(slice.len(), 3);
+        assert_eq!(
+            slice,
+            vec![&mut Some(1), &mut Some(2), &mut None as &mut Option<i32>].into_boxed_slice()
+        );
+
+        let first = slice[0].take();
+        assert_eq!(first, Some(1));
     }
 }
 
-/* Crazy stuff
+/* Crazy stuff: Chained Middleware -- You Ain't Need No Async/Await!
 
 #![allow(unused)]
 
@@ -426,8 +522,11 @@ impl Context {
 }
 
 fn main() {
-    // >>> Struct Updates <<<
+    // >>> Struct Updates <<< //
+
     type Func = dyn Fn(&mut Context);
+
+    //TODO: switch to [Response + Request + Context] closure signature
 
     let mut ctx = Context { val: 0 };
     let c1: Box<Func> = Box::new(|sum: &mut Context| { sum.add(40); }); // if define type as: Box<dyn FnBox>, it also works
@@ -441,7 +540,8 @@ fn main() {
        cl(&mut ctx);
     });
 
-    // >>> Primitive Updates <<<
+    // >>> Primitive Updates <<< //
+
     type Func1 = dyn Fn(&mut i32);
 
     let mut sum = 0;
@@ -449,10 +549,35 @@ fn main() {
     let c4: Box<Func1> = Box::new(|sum: &mut i32| { *sum += 2; });
 
     let mut vec1: Vec<Box<Func1>> = Vec::new();
-    vec1.push(c1);
-    vec1.push(c2);
+    vec1.push(c3);
+    vec1.push(c4);
 
     vec1.iter_mut().for_each(|cl: &mut Box<Func1>| {
+        cl(&mut sum);
+    });
+
+    // >>> Any trait-type updates <<<
+
+    type Func2 = dyn Fn(&mut dyn Any);
+    let mut sum = 0;
+
+    let c5: Box<Func2> = Box::new(|sum: &mut dyn Any| {
+        if let Some(ref mut sum) = sum.downcast_mut::<i32>() {
+            **sum += 40;
+        }
+    });
+
+    let c6: Box<Func2> = Box::new(|sum: &mut dyn Any| {
+        if let Some(ref mut sum) = sum.downcast_mut::<i32>() {
+            **sum += 2;
+        }
+    });
+
+    let mut vec2: Vec<Box<Func2>> = Vec::new();
+    vec2.push(c5);
+    vec2.push(c6);
+
+    vec.iter_mut().for_each(|cl: &mut Box<Func2>| {
         cl(&mut sum);
     });
 
