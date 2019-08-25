@@ -218,9 +218,51 @@ pub trait TupleReducer: Sized {
     /// Convert the tuples to a reference slice, where caller can use native iteration tools. Note
     /// that this is re-export of the tuples' internal content, hence the slice can't live longer
     /// than the tuple self.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::any::Any;
+    ///
+    /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+    ///
+    /// // convert the tuples to a slice of `Any` type
+    /// let slice: Box<[&dyn Any]> = src.ref_slice();
+    ///
+    /// // the slice has the same amount of elements as in the tuples.
+    /// assert_eq!(slice.len(), 5);
+    ///
+    /// // downcast the element to its actual type; wrong type cast will be rejected with a `None`
+    /// // output from the API call.
+    /// assert_eq!(slice[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+    /// assert_eq!(slice[0].downcast_ref::<Option<&str>>(), None);
+    /// assert_eq!(slice[1].downcast_ref::<Option<&str>>().unwrap(), &None);
+    ///
+    /// // unlike `mut_slice` API, the line below won't compile even if adding the `mut` keyword
+    /// // to the `slice` variable, because the source slice is immutable.
+    /// // let first = slice[0].downcast_mut::<Option<i32>>().unwrap().take();
+    /// ```
     fn ref_slice(&self) -> Box<[&dyn Any]>;
 
+    /// Convert the tuples to a reference slice which only include options wrapping the data of the
+    /// desired type [`T`]. Options with types other than the given one will be excluded from the slice.
+    /// Note that if the slice length is 0, it means the source tuple does not contain elements in
+    /// options that can be converted to type ['T'].
     ///
+    /// # Examples
+    /// ```rust
+    /// let src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+    /// let slice = src.strict_ref_slice::<i32>();
+    ///
+    /// // The above variable initiation is equivalent to the following:
+    /// // let slice: Box<[&i32]> = src.strict_ref_slice();
+    ///
+    /// assert_eq!(slice.len(), 3);
+    /// assert_eq!(
+    ///     slice,
+    ///     vec![&Some(1), &Some(2), &None as &Option<i32>].into_boxed_slice()
+    /// );
+    /// ```
     fn strict_ref_slice<T: Any>(&self) -> Box<[&Option<T>]>;
 
     ///
@@ -464,7 +506,39 @@ mod impl_tests {
     }
 
     #[test]
-    fn to_slice_base() {
+    fn ref_slice_base() {
+        let src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+
+         // convert the tuples to a slice of `Any` type
+         let slice: Box<[&dyn Any]> = src.ref_slice();
+
+         // the slice has the same amount of elements as in the tuples.
+         assert_eq!(slice.len(), 5);
+
+         // downcast the element to its actual type; wrong type cast will be rejected with a `None`
+         // output from the API call.
+         assert_eq!(slice[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+         assert_eq!(slice[0].downcast_ref::<Option<&str>>(), None);
+         assert_eq!(slice[1].downcast_ref::<Option<&str>>().unwrap(), &None);
+    }
+
+    #[test]
+    fn strict_ref_slice_base() {
+        let src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+        let slice = src.strict_ref_slice::<i32>();
+
+        // The above variable initiation is equivalent to the following:
+        // let slice: Box<[&i32]> = src.strict_ref_slice();
+
+        assert_eq!(slice.len(), 3);
+        assert_eq!(
+            slice,
+            vec![&Some(1), &Some(2), &None as &Option<i32>].into_boxed_slice()
+        );
+    }
+
+    #[test]
+    fn mut_slice_base() {
         let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
         let slice: Box<[&mut dyn Any]> = src.mut_slice();
 
@@ -477,12 +551,12 @@ mod impl_tests {
     }
 
     #[test]
-    fn to_slice_unwrapped_base() {
+    fn strict_mut_slice_base() {
         let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
         let slice = src.strict_mut_slice::<i32>();
 
         // The above variable initiation is equivalent to the following:
-        // let slice: Box<[&i32]> = src.strict_mut_slice();
+        // let slice: Box<[&mut i32]> = src.strict_mut_slice();
 
         assert_eq!(slice.len(), 3);
         assert_eq!(
@@ -492,6 +566,7 @@ mod impl_tests {
 
         let first = slice[0].take();
         assert_eq!(first, Some(1));
+        assert_eq!(slice[0], &mut None);
     }
 }
 
