@@ -219,7 +219,9 @@ pub trait TupleReducer: Sized {
     ///
     /// # Examples
     /// ```rust
-    /// let res = (Some(40), None as Option<i32>, Some(2))
+    /// use tuple_combinator::TupleReducer;
+    ///
+    /// let res =  (Some(40), Some("noise"), None as Option<i32>, Some(2))
     ///     .fold_strict(0i32, |sum, item| {
     ///         sum.and_then(|s| {
     ///             Some(s + item)
@@ -238,6 +240,7 @@ pub trait TupleReducer: Sized {
     ///
     /// ```rust
     /// use std::any::Any;
+    /// use tuple_combinator::TupleReducer;
     ///
     /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
     ///
@@ -266,6 +269,8 @@ pub trait TupleReducer: Sized {
     ///
     /// # Examples
     /// ```rust
+    /// use tuple_combinator::TupleReducer;
+    ///
     /// let src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
     /// let slice = src.strict_ref_slice::<i32>();
     ///
@@ -292,6 +297,7 @@ pub trait TupleReducer: Sized {
     ///
     /// ```rust
     /// use std::any::Any;
+    /// use tuple_combinator::TupleReducer;
     ///
     /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
     /// let slice: Box<[&mut dyn Any]> = src.mut_slice();
@@ -313,6 +319,8 @@ pub trait TupleReducer: Sized {
     /// # Examples
     ///
     /// ```rust
+    /// use tuple_combinator::TupleReducer;
+    ///
     /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
     /// let slice = src.strict_mut_slice::<i32>();
     ///
