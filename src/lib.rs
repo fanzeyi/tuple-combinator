@@ -212,7 +212,22 @@ pub trait TupleReducer: Sized {
     /// ```
     fn fold<U, F: Fn(Option<U>, &dyn Any) -> Option<U>>(&self, init: U, f: F) -> Option<U>;
 
+    /// `fold_strict` works very much like `fold`, except that only options with the same wrapped data
+    /// type as the output type will be "folded", i.e. invoking the supplied folding function. This
+    /// function will come into handy when the caller only care about the options in the tuples that
+    /// match the output type.
     ///
+    /// # Examples
+    /// ```rust
+    /// let res = (Some(40), None as Option<i32>, Some(2))
+    ///     .fold_strict(0i32, |sum, item| {
+    ///         sum.and_then(|s| {
+    ///             Some(s + item)
+    ///         })
+    ///     });
+    ///
+    /// assert_eq!(res, Some(42));
+    /// ```
     fn fold_strict<U: Any, F: Fn(Option<U>, &U) -> Option<U>>(&self, init: U, f: F) -> Option<U>;
 
     /// Convert the tuples to a reference slice, where caller can use native iteration tools. Note
@@ -262,13 +277,61 @@ pub trait TupleReducer: Sized {
     ///     slice,
     ///     vec![&Some(1), &Some(2), &None as &Option<i32>].into_boxed_slice()
     /// );
+    ///
+    /// // The line below won't compile because the immutability of the slice.
+    /// // let first = slice[0].downcast_mut::<Option<i32>>().unwrap().take();
     /// ```
     fn strict_ref_slice<T: Any>(&self) -> Box<[&Option<T>]>;
 
+    /// This method works similar to `ref_slice`, except that the members of the slice are mutable,
+    /// such that it is possible to make updates, or taking ownership from the underlying tuples data.
+    /// Note that modifying or altering the slice data will also cause the same data in the tuples to
+    /// be altered.
     ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::any::Any;
+    ///
+    /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+    /// let slice: Box<[&mut dyn Any]> = src.mut_slice();
+    ///
+    /// assert_eq!(slice.len(), 5);
+    /// assert_eq!(slice[0].downcast_ref::<Option<i32>>().unwrap(), &Some(1));
+    /// assert_eq!(slice[1].downcast_ref::<Option<&str>>().unwrap(), &None);
+    ///
+    /// let first = slice[0].downcast_mut::<Option<i32>>().unwrap().take();
+    /// assert_eq!(first, Some(1));
+    /// ```
     fn mut_slice(&mut self) -> Box<[&mut dyn Any]>;
 
+    /// This method works similar to `strict_ref_slice`, except that the members of the slice are
+    /// mutable, such that it is possible to make updates, or taking ownership from the underlying
+    /// tuples data. Note that modifying or altering the slice data will also cause the same data
+    /// in the tuples to be altered.
     ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let mut src = (Some(1), None as Option<&str>, Some(2), None as Option<i32>, Some(()));
+    /// let slice = src.strict_mut_slice::<i32>();
+    ///
+    /// // The above variable initiation is equivalent to the following:
+    /// // let slice: Box<[&mut i32]> = src.strict_mut_slice();
+    ///
+    /// assert_eq!(slice.len(), 3);
+    /// assert_eq!(
+    ///     slice,
+    ///     vec![&mut Some(1), &mut Some(2), &mut None as &mut Option<i32>].into_boxed_slice()
+    /// );
+    ///
+    /// // Now you can take the wrapped content out of the tuples/slice and operate on the element.
+    /// // Note that operations on the slice element will take the same effect on the origin tuples,
+    /// // since slice elements are merely mutable borrows.
+    /// let first = slice[0].take();
+    /// assert_eq!(first, Some(1));
+    /// assert_eq!(slice[0], &mut None);
+    /// ```
     fn strict_mut_slice<T: Any>(&mut self) -> Box<[&mut Option<T>]>;
 }
 
@@ -494,15 +557,15 @@ mod impl_tests {
     }
 
     #[test]
-    fn fold_unwrapped_base() {
-        let res = (Some(40), None as Option<i32>, Some(2))
+    fn fold_strict_base() {
+        let res = (Some(40), Some("noise"), None as Option<i32>, Some(2))
             .fold_strict(0i32, |sum, item| {
                 sum.and_then(|s| {
                     Some(s + item)
                 })
             });
 
-        assert_eq!(res, Some(42))
+        assert_eq!(res, Some(42));
     }
 
     #[test]
@@ -569,94 +632,3 @@ mod impl_tests {
         assert_eq!(slice[0], &mut None);
     }
 }
-
-/* Crazy stuff: Chained Middleware -- You Ain't Need No Async/Await!
-
-#![allow(unused)]
-
-use std::ptr;
-
-trait FnBox {
-    fn call_box(&mut self, val: &mut Context);
-}
-
-impl<F: Fn(&mut Context) + ?Sized> FnBox for F {
-    fn call_box(&mut self, val: &mut Context) {
-        self(val);
-    }
-}
-
-struct Context {
-    val: usize,
-}
-
-impl Context {
-    fn add(&mut self, additional: usize) {
-        self.val += additional;
-    }
-}
-
-fn main() {
-    // >>> Struct Updates <<< //
-
-    type Func = dyn Fn(&mut Context);
-
-    //TODO: switch to [Response + Request + Context] closure signature
-
-    let mut ctx = Context { val: 0 };
-    let c1: Box<Func> = Box::new(|sum: &mut Context| { sum.add(40); }); // if define type as: Box<dyn FnBox>, it also works
-    let c2: Box<Func> = Box::new(|sum: &mut Context| { sum.add(2); });
-
-    let mut vec: Vec<Box<Func>> = Vec::new();
-    vec.push(c1);
-    vec.push(c2);
-
-    vec.iter_mut().for_each(|cl: &mut Box<Func>| {
-       cl(&mut ctx);
-    });
-
-    // >>> Primitive Updates <<< //
-
-    type Func1 = dyn Fn(&mut i32);
-
-    let mut sum = 0;
-    let c3: Box<Func1> = Box::new(|sum: &mut i32| { *sum += 40; }); // if define type as: Box<dyn FnBox>, it also works
-    let c4: Box<Func1> = Box::new(|sum: &mut i32| { *sum += 2; });
-
-    let mut vec1: Vec<Box<Func1>> = Vec::new();
-    vec1.push(c3);
-    vec1.push(c4);
-
-    vec1.iter_mut().for_each(|cl: &mut Box<Func1>| {
-        cl(&mut sum);
-    });
-
-    // >>> Any trait-type updates <<<
-
-    type Func2 = dyn Fn(&mut dyn Any);
-    let mut sum = 0;
-
-    let c5: Box<Func2> = Box::new(|sum: &mut dyn Any| {
-        if let Some(ref mut sum) = sum.downcast_mut::<i32>() {
-            **sum += 40;
-        }
-    });
-
-    let c6: Box<Func2> = Box::new(|sum: &mut dyn Any| {
-        if let Some(ref mut sum) = sum.downcast_mut::<i32>() {
-            **sum += 2;
-        }
-    });
-
-    let mut vec2: Vec<Box<Func2>> = Vec::new();
-    vec2.push(c5);
-    vec2.push(c6);
-
-    vec.iter_mut().for_each(|cl: &mut Box<Func2>| {
-        cl(&mut sum);
-    });
-
-    println!("sum: {}", &sum.val);
-}
-
-*/
